@@ -53,7 +53,12 @@
   					j=Math.floor((Math.random())*(N*N)+1);
   					tc++;
   					if(tc>N*N*N){
-  						j=0;break;
+              for(j=1;j<=N*N;j++){
+                if(nums[j]==false){
+                  break;
+  					    }
+  					  }  
+  						break;
   					}
   				}
   				
