@@ -1,10 +1,124 @@
-
 <html>
 <head>
+  EP kinda index page
 
+<script type="text/javascript">
+  var cv;
+  var ctx;
+  function Init(){
+		cv = document.getElementById("main_canvas");
+		ctx=cv.getContext("2d");
+	
+		tdate = new Date();
+		d = tdate.getTime();
+	}
+
+
+  function Dotable(start)
+  {
+    var tx,ty;
+  	N=5;
+  	N=document.getElementById("n_input").value;
+  	w_input=document.getElementById("w_input");
+  	W=100;
+  	W=w_input.value;
+  	H=100;
+  	H=document.getElementById("h_input").value;
+  	ctx.fillStyle="#FFFFFF";
+  	ctx.fillRect(0,0,1000,500);
+  	
+  	ctx.textAlign="center";
+  	ctx.textBaseline="middle";
+  	ctx.font="30px Arial";
+  	
+  	var nums = new Array();
+  	var j;
+  	for(j=1;j<=N*N;j++){
+  		nums[j]=false;
+  	}
+  	var tc=0;
+  	for(tx=1;tx<=N;tx++){
+  		for(ty=1;ty<=N;ty++){
+  			
+  			ctx.fillStyle="#FFFFFF";
+  			ctx.fillRect((tx-1)*W,(ty-1)*H,W,H);
+  			ctx.strokeStyle="#000000";
+  			ctx.strokeRect((tx-1)*W,(ty-1)*H,W,H);
+  			
+  			ctx.fillStyle="#000000";
+  			
+  			if(start==1){
+  				j=Math.floor((Math.random())*(N*N)+1);
+  				while(nums[j]==true){
+  					j=Math.floor((Math.random())*(N*N)+1);
+  					tc++;
+  					if(tc>N*N*N){
+  						j=0;break;
+  					}
+  				}
+  				
+  			}else{
+  				
+  				j=(tx+(ty-1)*N);
+  			}
+  			ctx.fillText(j,(tx-1)*W+W/2,(ty-1)*H+H/2,W);
+  			nums[j]=true;
+  		}
+  	}
+  	
+  }
+	var tdate;
+  var startedd;
+	var startdate;
+	
+	function canvasClick(){
+		if(startedd==1){
+			
+			startedd=0;
+			
+			
+			Dotable(0);
+			
+			ctx.textAlign="center";
+			ctx.textBaseline="middle";
+			ctx.font="30px Arial";
+			
+			ctx.fillStyle="#FFFFFF";
+			ctx.fillRect(790,200,200,100);
+			
+			tdate=new Date();
+			ctx.fillStyle="#000000";
+			var ts=tdate.getSeconds();
+			var tms=tdate.getTime()-startdate.getTime();
+			
+			ctx.fillText(tms,900,250,200);
+		}else{
+			startedd=1;
+			
+			Dotable(1);
+			startdate = new Date();
+			
+			ctx.fillStyle="#BBBBBB";
+			ctx.fillRect(790,200,200,100);
+			ctx.fillStyle="#000000";
+			ctx.fillText("Working",900,250,200)
+		}
+	}
+
+</script>
 </head>
 
-<body>
+<body align="center" onload="Init();">
+
+<input id="n_input" type="range" min="1" max="6" step="1" value="5" onchange="Dotable(0);"/>
+<input id="w_input" type="range" min="10" max="200" step="10" value="100" onchange="Dotable(0);"/>
+<input id="h_input" type="range" min="10" max="200" step="10" value="100" onchange="Dotable(0);"/>
+<button id="main_button" type="button" onclick="doTime()">Display TableDate</button><br/>
+
+
+
+<canvas id="main_canvas" width="1000" height="500" onclick="canvasClick();"></canvas>
+
 
 </body>
 </html>
