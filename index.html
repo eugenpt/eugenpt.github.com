@@ -31,6 +31,10 @@
   	W=w_input.value;
   	H=100;
   	H=document.getElementById("h_input").value;
+    N_missed=0;
+    N_missed=document.getElementById("nm_input").value;
+    var tempj;
+    
   	ctx.fillStyle="#FFFFFF";
   	ctx.fillRect(0,0,1000,500);
   	
@@ -55,6 +59,10 @@
   			ctx.fillStyle="#000000";
   			
   			if(start==1){
+          if(N_missed>0){
+            tempj=Math.floor((Math.random())*(N*N)+1);
+          }
+          
   				j=Math.floor((Math.random())*(N*N)+1);
   				while(nums[j]==true){
   					j=Math.floor((Math.random())*(N*N)+1);
@@ -68,10 +76,12 @@
   						break;
   					}
   				}
-  				
+  				if(j>=tempj){
+    			 j=j+1; 
+  				}
   			}else{
   				
-  				j=(tx+(ty-1)*N);
+  				j=(tx+(ty-1)*N)+N_missed;
   			}
   			ctx.fillText(j,(tx-1)*W+W/2,(ty-1)*H+H/2,W);
   			nums[j]=true;
@@ -143,7 +153,7 @@
 </td><td>
 <input id="h_input" type="range" min="10" max="200" step="10" value="100" onchange="Dotable(0);"/>
 </td><td>
-<input id="nm_input" type="range" min="0" max="6" step="1" value="0" onchange="Dotable(0);"/>
+<input id="nm_input" type="range" min="0" max="1" step="1" value="0" onchange="Dotable(0);"/>
 </td>
 </tr>
 </table>
