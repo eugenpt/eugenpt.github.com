@@ -15,10 +15,10 @@
 
 	
   function updateStuff(){
-    document.getElementById("n_meter").innerHTML="="+document.getElementById("n_input").value;
-    document.getElementById("w_meter").innerHTML="="+document.getElementById("w_input").value;
-    document.getElementById("h_meter").innerHTML="="+document.getElementById("h_input").value;
-    document.getElementById("nm_meter").innerHTML="="+document.getElementById("nm_input").value;
+    document.getElementById("n_meter").innerHTML="N="+document.getElementById("n_input").value;
+    document.getElementById("w_meter").innerHTML="W="+document.getElementById("w_input").value;
+    document.getElementById("h_meter").innerHTML="H="+document.getElementById("h_input").value;
+    document.getElementById("nm_meter").innerHTML="N missed="+document.getElementById("nm_input").value;
   }
   function Dotable(start)
   {
@@ -126,13 +126,13 @@
 <table>
 <tr>
 <td>
-N<p id="n_meter"></p>
+<p id="n_meter"></p>
 </td><td>
-W<p id="w_meter"></p>
+<p id="w_meter"></p>
 </td><td>
-H<p id="h_meter"></p>
+<p id="h_meter"></p>
 </td><td>
-N missed<p id="nm_meter"></p>
+<p id="nm_meter"></p>
 </td>
 </tr>
 <tr>
