@@ -76,15 +76,16 @@
   						break;
   					}
   				}
+          nums[j]=true;
   				if(j>=tempj){
     			 j=j+1; 
   				}
   			}else{
   				
-  				j=(tx+(ty-1)*N)+N_missed;
+  				j=(tx+(ty-1)*N)+Math.floor(N_missed);
   			}
   			ctx.fillText(j,(tx-1)*W+W/2,(ty-1)*H+H/2,W);
-  			nums[j]=true;
+  			
   		}
   	}
   	
