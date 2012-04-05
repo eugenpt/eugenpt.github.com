@@ -115,9 +115,31 @@
 
 <body align="center" onload="Init();Dotable(0);">
 
+
+<table>
+<tr>
+<td>
+N<p id="n_meter"></p>
+</td><td>
+W<p id="w_meter"></p>
+</td><td>
+H<p id="h_meter"></p>
+</td><td>
+N missed<p id="nm_meter"></p>
+</td>
+</tr>
+<tr>
+<td>
 <input id="n_input" type="range" min="1" max="6" step="1" value="5" onchange="Dotable(0);"/>
+</td><td>
 <input id="w_input" type="range" min="10" max="200" step="10" value="100" onchange="Dotable(0);"/>
+</td><td>
 <input id="h_input" type="range" min="10" max="200" step="10" value="100" onchange="Dotable(0);"/>
+</td><td>
+<input id="nm_input" type="range" min="0" max="6" step="1" value="0" onchange="Dotable(0);"/>
+</td>
+</tr>
+</table>
 <button id="main_button" type="button" onclick="doTime()">Display TableDate</button><br/>
 
 
