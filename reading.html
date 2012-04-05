@@ -1,6 +1,6 @@
 <html>
 <head>
-  EP reading exercise page
+ <title>EP reading exercise page</title> 
 
 <script type="text/javascript">
   var cv;
@@ -16,6 +16,7 @@
 	
   function updateStuff(){
     document.getElementById("n_meter").innerHTML="N="+document.getElementById("n_input").value;
+    document.getElementById("fs_meter").innerHTML="fs="+document.getElementById("fs_input").value;
     document.getElementById("w_meter").innerHTML="W="+document.getElementById("w_input").value;
     document.getElementById("h_meter").innerHTML="H="+document.getElementById("h_input").value;
     document.getElementById("nm_meter").innerHTML="N missed="+document.getElementById("nm_input").value;
@@ -33,6 +34,9 @@
   	H=document.getElementById("h_input").value;
     N_missed=0;
     N_missed=document.getElementById("nm_input").value;
+  	fs=30;
+  	fs=document.getElementById("fs_input").value;
+	
     var tempj;
     if(N_missed>0){
       tempj=Math.floor((Math.random())*(N*N)+1);
@@ -43,7 +47,7 @@
   	
   	ctx.textAlign="center";
   	ctx.textBaseline="middle";
-  	ctx.font="30px Arial";
+  	ctx.font=fs+"px Arial";
   	
   	var nums = new Array();
   	var j;
@@ -141,6 +145,8 @@
 <td>
 <p id="n_meter"></p>
 </td><td>
+<p id="fs_meter"></p>
+</td><td>
 <p id="w_meter"></p>
 </td><td>
 <p id="h_meter"></p>
@@ -151,6 +157,8 @@
 <tr>
 <td>
 <input id="n_input" type="range" min="1" max="6" step="1" value="5" onchange="Dotable(0);"/>
+</td><td>
+<input id="fs_input" type="range" min="5" max="40" step="1" value="25" onchange="Dotable(0);"/>
 </td><td>
 <input id="w_input" type="range" min="10" max="200" step="10" value="100" onchange="Dotable(0);"/>
 </td><td>
