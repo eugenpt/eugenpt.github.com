@@ -34,6 +34,9 @@
     N_missed=0;
     N_missed=document.getElementById("nm_input").value;
     var tempj;
+    if(N_missed>0){
+      tempj=Math.floor((Math.random())*(N*N)+1);
+    }
     
   	ctx.fillStyle="#FFFFFF";
   	ctx.fillRect(0,0,1000,500);
@@ -59,9 +62,6 @@
   			ctx.fillStyle="#000000";
   			
   			if(start==1){
-          if(N_missed>0){
-            tempj=Math.floor((Math.random())*(N*N)+1);
-          }
           
           tc=0;
           
