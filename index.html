@@ -13,9 +13,16 @@
 		d = tdate.getTime();
 	}
 
-
+	
+  function updateStuff(){
+    document.getElementById("n_meter").innerHTML="="+document.getElementById("n_input").value;
+    document.getElementById("w_meter").innerHTML="="+document.getElementById("w_input").value;
+    document.getElementById("h_meter").innerHTML="="+document.getElementById("h_input").value;
+    document.getElementById("nm_meter").innerHTML="="+document.getElementById("nm_input").value;
+  }
   function Dotable(start)
   {
+    updateStuff();
     var tx,ty;
   	N=5;
   	N=document.getElementById("n_input").value;
