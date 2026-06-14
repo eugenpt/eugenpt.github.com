@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>T2* Parameter Uncertainty Explorer</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 20px; background: #fafafa; }
+        .controls { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; 
+                    padding: 15px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); align-items: flex-end;}
+        .control-group { display: flex; flex-direction: column; min-width: 140px; }
+        .control-group label { font-size: 11px; color: #555; margin-bottom: 3px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;}
+        .equation-bar { padding: 12px 15px; margin-bottom: 15px; background: white; border-radius: 8px; 
+                        box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 13px; line-height: 1.8; color: #333; }
+        .equation-bar .eq-label { font-weight: 700; color: #555; margin-right: 4px; }
+        .equation-bar code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', monospace; font-size: 12px; }
+        .plots { display: flex; gap: 20px; flex-wrap: wrap; }
+        .plot-container { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 10px; }
+        input[type=range] { width: 100%; cursor: pointer; }
+        .toggle-group { display: flex; align-items: center; gap: 8px; min-width: 140px; height: 30px;}
+        .toggle-group input { cursor: pointer; width: 18px; height: 18px; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; margin-left: 6px;}
+        .badge-complex { background: #3498db; }
+        .badge-mag { background: #e74c3c; }
+        .derived-param { font-size: 11px; color: #888; margin-top: 2px; font-style: italic; }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <div class="toggle-group">
+            <input type="checkbox" id="magMode" checked>
+            <label for="magMode" style="margin:0; cursor:pointer;">Magnitude Mode <span id="modeBadge" class="badge badge-mag">MAGNITUDE</span></label>
+        </div>
+        <div class="control-group" id="sigmaGroup">
+            <label>Noise σ: <span id="v-sigma">0.04</span></label>
+            <input type="range" id="noiseSigma" min="0.01" max="0.25" value="0.04" step="0.01">
+        </div>
+        <div class="control-group">
+            <label>T2 Center (ms): <span id="v-t2">30</span></label>
+            <input type="range" id="t2Center" min="5" max="200" value="30" step="1">
+        </div>
+        <div class="control-group">
+            <label>Teff Center (ms): <span id="v-teff">90</span></label>
+            <input type="range" id="teffCenter" min="1" max="300" value="90" step="0.5">
+        </div>
+        <div class="control-group">
+            <label>N Echoes: <span id="v-ne">5</span></label>
+            <input type="range" id="nEchoes" min="3" max="64" value="5" step="1">
+        </div>
+        <div class="control-group">
+            <label>Max TE (ms): <span id="v-maxte">100.0</span></label>
+            <input type="range" id="maxTE" min="1" max="200" value="100.0" step="0.5">
+            <div class="derived-param" style="display:none;">ESP = <span id="v-esp-derived">3.00</span> ms</div>
+        </div>
+        <div class="control-group">
+            <label>Range Factor (upper): <span id="v-rf">5.0</span></label>
+            <input type="range" id="rangeFactor" min="1.1" max="10.0" value="5.0" step="0.1">
+        </div>
+        <div class="control-group">
+            <label>Grid Size: <span id="v-gs">50</span></label>
+            <input type="range" id="gridSize" min="5" max="100" value="50" step="1">
+        </div>
+    </div>
+
+    <div class="equation-bar" id="equationBar"></div>
+
+    <div class="plots">
+        <div class="plot-container"><div id="heatmap"></div></div>
+        <div class="plot-container"><div id="decayPlot"></div></div>
+    </div>
+
+<script>
+// === Special Functions ===
+function besselI0(x) {
+    const ax = Math.abs(x);
+    if (ax < 3.75) {
+        const y = x / 3.75, y2 = y * y;
+        return 1 + y2*(3.5156229 + y2*(3.0899424 + y2*(1.2067492 + y2*(0.2659732 + y2*(0.0360768 + y2*0.0045813)))));
+    } else {
+        const y = 3.75 / ax;
+        return (Math.exp(ax)/Math.sqrt(ax))*(0.39894228+y*(0.01328592+y*(0.00225319+y*(-0.00157565+y*(0.00916281+y*(-0.02057706+y*(0.02635537+y*(-0.01647633+y*0.00392377))))))));
+    }
+}
+function besselI1(x) {
+    const ax = Math.abs(x);
+    if (ax < 3.75) {
+        const y = x / 3.75, y2 = y * y;
+        return ax*(0.5+y2*(0.87890594+y2*(0.51498869+y2*(0.15084934+y2*(0.02658733+y2*(0.00301532+y2*0.00032411))))));
+    } else {
+        const y = 3.75/ax, sign = x<0?-1:1;
+        return sign*(Math.exp(ax)/Math.sqrt(ax))*(0.39894228+y*(-0.03988024+y*(-0.00362018+y*(0.00163801+y*(-0.01031555+y*(0.02282967+y*(-0.02895312+y*(0.01787654+y*(-0.00420059)))))))));
+    }
+}
+function ricianMean(nu, sigma) {
+    if (sigma <= 0) return Math.abs(nu);
+    if (nu <= 0) return sigma * Math.sqrt(Math.PI / 2);
+    const x = -(nu*nu)/(2*sigma*sigma), halfX = x/2, negHalfX = -halfX;
+    return sigma*Math.sqrt(Math.PI/2)*Math.exp(halfX)*((1-x)*besselI0(negHalfX)-x*besselI1(negHalfX));
+}
+function ricianVariance(nu, sigma) {
+    const em = ricianMean(nu, sigma);
+    return Math.max(2*sigma*sigma + nu*nu - em*em, 1e-12);
+}
+
+// === Signal Models ===
+function sinc(x) { return x===0 ? 1 : Math.sin(Math.PI*x)/(Math.PI*x); }
+function complexSignal(te,t2,teff,a) { return a*Math.exp(-te/t2)*sinc(te/teff); }
+function magnitudeSignal(te,t2,teff,a,sigma) { return ricianMean(complexSignal(te,t2,teff,a), sigma); }
+function generateEchoTimes(n,esp) { const t=new Float64Array(n); for(let i=0;i<n;i++) t[i]=(i+1)*esp; return t; }
+
+function optimalAmplitude(t2,teff,refData,tes,isMag,sigma) {
+    let num=0,den=0;
+    for(let i=0;i<tes.length;i++){const b=complexSignal(tes[i],t2,teff,1.0);num+=refData[i]*b;den+=b*b;}
+    let aEst=den===0?0:num/den;
+    if(isMag&&aEst>0){let g=0,h=0;for(let i=0;i<tes.length;i++){const p=magnitudeSignal(tes[i],t2,teff,aEst,sigma);const r=refData[i]-p;const d=complexSignal(tes[i],t2,teff,1.0);g-=r*d;h+=d*d;}if(h>0)aEst-=g/h;if(aEst<0)aEst=0;}
+    return aEst;
+}
+
+// Returns sqrt(Δχ²) = σ-equivalent distance
+function sigmaDistance(refData, testData, tes, t2Ref, teffRef, aRef, isMag, sigma) {
+    let chi2 = 0;
+    for (let i = 0; i < refData.length; i++) {
+        const nuRef = complexSignal(tes[i], t2Ref, teffRef, aRef);
+        const variance = isMag ? ricianVariance(nuRef, sigma) : sigma * sigma;
+        const diff = refData[i] - testData[i];
+        chi2 += (diff * diff) / variance;
+    }
+    return Math.sqrt(chi2);
+}
+
+function asymmetricRange(center, factor, n) {
+    const lo = Math.max(center * 0.1, 0.1);
+    const hi = center * factor;
+    const logLo = Math.log(lo), logHi = Math.log(hi);
+    const vals = new Float64Array(n);
+    for (let i = 0; i < n; i++) vals[i] = Math.exp(logLo + (logHi - logLo) * i / (n - 1));
+    return vals;
+}
+
+// Adaptive percentile-based colormap limits
+function adaptiveColorLimits(zMatrix) {
+    const flat = [];
+    for (let r = 0; r < zMatrix.length; r++)
+        for (let c = 0; c < zMatrix[r].length; c++)
+            flat.push(zMatrix[r][c]);
+    flat.sort((a, b) => a - b);
+    const n = flat.length;
+    // Use 5th and 95th percentiles to avoid outlier domination
+    const lo = flat[Math.floor(n * 0.05)];
+    const hi = flat[Math.floor(n * 0.95)];
+    // Ensure minimum dynamic range of 1σ
+    return { zmin: Math.max(lo, 0), zmax: Math.max(hi, lo + 1) };
+}
+
+// === State ===
+const ids=['t2Center','teffCenter','nEchoes','maxTE','rangeFactor','gridSize','noiseSigma'];
+const displays=['v-t2','v-teff','v-ne','v-maxte','v-rf','v-gs','v-sigma'];
+let currentMapData=null, currentParams=null;
+
+function getParams() {
+    const n=+document.getElementById('nEchoes').value, mt=+document.getElementById('maxTE').value;
+    return {
+        t2Center:+document.getElementById('t2Center').value, teffCenter:+document.getElementById('teffCenter').value,
+        nEchoes:n, maxTE:mt, esp:mt/n,
+        rangeFactor:+document.getElementById('rangeFactor').value, gridSize:+document.getElementById('gridSize').value,
+        noiseSigma:+document.getElementById('noiseSigma').value, isMag:document.getElementById('magMode').checked
+    };
+}
+
+function computeReference(p) {
+    const tes=generateEchoTimes(p.nEchoes,p.esp);
+    const refData=new Float64Array(p.nEchoes);
+    for(let i=0;i<p.nEchoes;i++) refData[i]=p.isMag?magnitudeSignal(tes[i],p.t2Center,p.teffCenter,1.0,p.noiseSigma):complexSignal(tes[i],p.t2Center,p.teffCenter,1.0);
+    return {tes,refData,aRef:1.0};
+}
+
+function computeMap(p) {
+    const {tes,refData,aRef}=computeReference(p);
+    const teffVals=asymmetricRange(p.teffCenter,p.rangeFactor,p.gridSize).reverse();
+    const t2Vals=asymmetricRange(p.t2Center,p.rangeFactor,p.gridSize);
+    const z=[];
+    for(let r=0;r<p.gridSize;r++){
+        const row=new Float64Array(p.gridSize);
+        for(let c=0;c<p.gridSize;c++){
+            const aOpt=optimalAmplitude(t2Vals[c],teffVals[r],refData,tes,p.isMag,p.noiseSigma);
+            const testCurve=new Float64Array(p.nEchoes);
+            for(let i=0;i<p.nEchoes;i++) testCurve[i]=p.isMag?magnitudeSignal(tes[i],t2Vals[c],teffVals[r],aOpt,p.noiseSigma):complexSignal(tes[i],t2Vals[c],teffVals[r],aOpt);
+            row[c]=sigmaDistance(refData,testCurve,tes,p.t2Center,p.teffCenter,aRef,p.isMag,p.noiseSigma);
+        }
+        z.push(row);
+    }
+    return {z,t2Vals,teffVals,refData,tes,aRef};
+}
+
+function updateEquation(isMag) {
+    const bar=document.getElementById('equationBar');
+    const sigModel=isMag
+        ? `<code>E[M|ν,σ] = σ√(π/2)·L<sub>½</sub>(−ν²/2σ²)</code>, <code>Var[M] = 2σ²+ν²−E[M]²</code>`
+        : `<code>S(TE) = A·exp(−TE/T2*)·sinc(TE/Teff)</code>, Gaussian noise σ`;
+    bar.innerHTML=`<span class="eq-label">Signal:</span> ${sigModel}<br>`+
+        `<span class="eq-label">Map Metric:</span> <code>σ-dist = √[Σ<sub>n</sub> (M<sub>ref</sub>−M<sub>test</sub>)² / Var[M]]</code> &nbsp;|&nbsp; `+
+        `<span class="eq-label">Contour σ=1</span> ≈ 68% CI, <span class="eq-label">σ=2</span> ≈ 95% CI &nbsp;|&nbsp; `+
+        `<span class="eq-label">Echoes:</span> <code>TE<sub>n</sub>=n·ESP, n=1…N</code>`;
+}
+
+function updateAll() {
+    ids.forEach((id,i)=>{const el=document.getElementById(displays[i]);if(el)el.textContent=document.getElementById(id).value;});
+    const p=getParams();
+    document.getElementById('v-esp-derived').textContent=p.esp.toFixed(2);
+    const isMag=document.getElementById('magMode').checked;
+    const sg=document.getElementById('sigmaGroup'),bg=document.getElementById('modeBadge');
+    sg.style.opacity=isMag?'1':'0.3'; sg.style.pointerEvents=isMag?'auto':'none';
+    bg.textContent=isMag?'MAGNITUDE':'COMPLEX'; bg.className='badge '+(isMag?'badge-mag':'badge-complex');
+    updateEquation(isMag);
+    currentParams=p; currentMapData=computeMap(currentParams);
+
+    // ADAPTIVE colormap limits
+    const {zmin, zmax} = adaptiveColorLimits(currentMapData.z);
+
+    Plotly.react('heatmap',[
+        {z:currentMapData.z,x:currentMapData.t2Vals,y:currentMapData.teffVals,type:'heatmap',
+         colorscale:[[0,'#000033'],[0.15,'#0000aa'],[0.3,'#0066ff'],[0.45,'#00cc66'],[0.6,'#ffcc00'],[0.8,'#ff6600'],[1,'#cc0000']],
+         zmin:zmin, zmax:zmax,
+         colorbar:{title:'σ-dist',ticksuffix:' σ'},
+         hovertemplate:'T2: %{x:.2f} ms<br>Teff: %{y:.2f} ms<br>σ-dist: %{z:.2f} σ<extra></extra>'},
+        {x:[p.t2Center],y:[p.teffCenter],mode:'markers',type:'scatter',
+         marker:{symbol:'cross',size:14,color:'white',line:{width:2,color:'rgba(0,0,0,0.5)'}},
+         hoverinfo:'name',name:`Center (T2=${p.t2Center}, Teff=${p.teffCenter})`}
+    ],{
+        title:`${isMag?'Magnitude':'Complex'} Parameter Uncertainty Map (σ-equivalents)`,
+        xaxis:{title:'T2 (ms)',range:[Math.max(p.t2Center*0.1,0.1),p.t2Center*p.rangeFactor]},
+        yaxis:{title:'Teff (ms)',range:[Math.max(p.teffCenter*0.1,0.1),p.teffCenter*p.rangeFactor]},
+        width:520,height:520,margin:{t:50,b:60,l:70,r:20}
+    },{responsive:true});
+    updateDecayPlot(null);
+}
+
+function updateDecayPlot(hoverPoint) {
+    const p=currentParams, tes=currentMapData.tes, refData=currentMapData.refData;
+    const errY = tes.map((te) => {
+        const nu = complexSignal(te, p.t2Center, p.teffCenter, currentMapData.aRef);
+        return Math.sqrt(p.isMag ? ricianVariance(nu, p.noiseSigma) : p.noiseSigma*p.noiseSigma);
+    });
+
+    const traces=[{
+        x:Array.from(tes),y:Array.from(refData),error_y:{type:'data',array:errY,color:'rgba(136,136,136,0.6)',thickness:1.5,width:4},
+        mode:'markers+lines',name:`Center (T2=${p.t2Center}, Teff=${p.teffCenter})`,
+        marker:{size:7,color:'#888'},line:{dash:'dash',color:'#888',width:2}
+    }];
+    let title=p.isMag?'Magnitude Decay ± 1σ':'Complex Decay ± 1σ';
+
+    if(hoverPoint){
+        const aOpt=optimalAmplitude(hoverPoint.t2,hoverPoint.teff,refData,tes,p.isMag,p.noiseSigma);
+        const tc=tes.map(te=>p.isMag?magnitudeSignal(te,hoverPoint.t2,hoverPoint.teff,aOpt,p.noiseSigma):complexSignal(te,hoverPoint.t2,hoverPoint.teff,aOpt));
+        traces.push({x:Array.from(tes),y:tc,mode:'markers+lines',
+            name:`Cursor (T2=${hoverPoint.t2.toFixed(2)}, Teff=${hoverPoint.teff.toFixed(2)})`,
+            marker:{size:7,color:'#e74c3c'},line:{color:'#e74c3c',width:3}});
+        const sd = sigmaDistance(refData,tc,tes,p.t2Center,p.teffCenter,currentMapData.aRef,p.isMag,p.noiseSigma);
+        title=`Cursor vs Center: ${sd.toFixed(2)}σ apart`;
+    }
+    Plotly.react('decayPlot',traces,{
+        title,xaxis:{title:'TE (ms)',rangemode:'tozero'},yaxis:{title:'Signal',rangemode:'tozero'},
+        width:520,height:520,margin:{t:50,b:60,l:70,r:20},
+        legend:{x:0.02,y:0.98,bgcolor:'rgba(255,255,255,0.8)'},hovermode:'closest'
+    },{responsive:true});
+}
+
+// === ROBUST HOVER ===
+const hd=document.getElementById('heatmap'); let lhk='';
+hd.addEventListener('mousemove',function(e){
+    if(!currentMapData||!currentParams)return;
+    const L=hd._fullLayout;if(!L||!L.xaxis)return;
+    const bb=hd.getBoundingClientRect(),xp=e.clientX-bb.left-L.margin.l,yp=e.clientY-bb.top-L.margin.t;
+    const pw=L.width-L.margin.l-L.margin.r,ph=L.height-L.margin.t-L.margin.b;
+    if(xp<0||xp>pw||yp<0||yp>ph){if(lhk!=='out'){lhk='out';updateDecayPlot(null);}return;}
+    const xr=L.xaxis.range,yr=L.yaxis.range;
+    const t2=xr[0]+(xp/pw)*(xr[1]-xr[0]), teff=yr[1]-(yp/ph)*(yr[1]-yr[0]);
+    const t2c=Math.max(currentMapData.t2Vals[0],Math.min(t2,currentMapData.t2Vals[currentMapData.t2Vals.length-1]));
+    const tec=Math.max(currentMapData.teffVals[currentMapData.teffVals.length-1],Math.min(teff,currentMapData.teffVals[0]));
+    const k=`${t2c.toFixed(2)}_${tec.toFixed(2)}`;
+    if(k!==lhk){lhk=k;updateDecayPlot({t2:t2c,teff:tec});}
+});
+hd.addEventListener('mouseleave',()=>{lhk='out';updateDecayPlot(null);});
+ids.forEach(id=>document.getElementById(id).addEventListener('input',updateAll));
+document.getElementById('magMode').addEventListener('change',updateAll);
+updateAll();
+</script>
+</body>
+</html>
