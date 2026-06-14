@@ -15,6 +15,7 @@
         .equation-bar { padding: 12px 15px; margin-bottom: 15px; background: white; border-radius: 8px; 
                         box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 13px; line-height: 1.8; color: #333; }
         .equation-bar .eq-label { font-weight: 700; color: #555; margin-right: 4px; }
+		.eq-content {font-size: 16px;}
         .equation-bar code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', monospace; font-size: 12px; }
         .plots { display: flex; gap: 20px; flex-wrap: wrap; }
         .plot-container { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 10px; }
@@ -311,7 +312,7 @@ function updateEquation(isMag, isWeighted) {
 		? String.raw`\sigma\text{-dist} = \sqrt{\sum_{n} \frac{(S_{ref}-S_{test})^2}{\mathrm{Var}_n}}`
 		: String.raw`\sigma\text{-dist} = \frac{1}{\sigma}\sqrt{\sum_{n} (S_{ref}-S_{test})^2}`;
     
-    const echoTex = String.raw`\mathrm{TE}_n = n \cdot \mathrm{ESP}, \quad n = 1, \ldots, N`;
+    const echoTex = String.raw`\mathrm{TE}_n = \mathrm{TE}_{\max} \cdot \frac{n}{N}, \quad n = 1, \ldots, N`;
     
     bar.innerHTML = '';
     
@@ -341,6 +342,7 @@ function updateEquation(isMag, isWeighted) {
 			group.appendChild(lbl);
 
 			const math = document.createElement('span');
+			math.className = 'eq-content';
 			katex.render(tex, math, { throwOnError: false, displayMode: false });
 			group.appendChild(math);
 
