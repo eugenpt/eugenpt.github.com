@@ -76,6 +76,94 @@
     </div>
 
 <script>
+
+// === Compact URL State (Binary + Base64url) ===
+const STATE_VERSION = 1;
+
+function packState() {
+    const buf = new ArrayBuffer(16);
+    const view = new DataView(buf);
+    
+    const t2   = Math.round(Math.min(Math.max(+document.getElementById('t2Center').value, 0), 6553.5) * 10);
+    const teff = Math.round(Math.min(Math.max(+document.getElementById('teffCenter').value, 0), 6553.5) * 10);
+    const maxTE= Math.round(Math.min(Math.max(+document.getElementById('maxTE').value, 0), 6553.5) * 10);
+    const sig  = Math.round(Math.min(Math.max(+document.getElementById('noiseSigma').value, 0), 65.535) * 1000);
+    const ne   = Math.min(Math.max(+document.getElementById('nEchoes').value, 0), 255);
+    const gs   = Math.min(Math.max(+document.getElementById('gridSize').value, 0), 255);
+    const rf   = Math.round((Math.min(Math.max(+document.getElementById('rangeFactor').value, 1.0), 26.5) - 1.0) * 10);
+    const flags = (document.getElementById('magMode').checked ? 1 : 0)
+                | (document.getElementById('weightedMode').checked ? 2 : 0);
+    
+    view.setUint8(0, STATE_VERSION);
+    view.setUint16(1, t2, true);     // little-endian
+    view.setUint16(3, teff, true);
+    view.setUint16(5, maxTE, true);
+    view.setUint16(7, sig, true);
+    view.setUint8(9, ne);
+    view.setUint8(10, gs);
+    view.setUint8(11, rf);
+    view.setUint8(12, flags);
+    // bytes 13-15 reserved
+    
+    // Base64url encode (no padding, URL-safe)
+    const bytes = new Uint8Array(buf);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function unpackState(token) {
+    try {
+        // Reverse base64url → standard base64 with padding
+        let b64 = token.replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4) b64 += '=';
+        const binary = atob(b64);
+        const buf = new ArrayBuffer(binary.length);
+        const bytes = new Uint8Array(buf);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        
+        const view = new DataView(buf);
+        const version = view.getUint8(0);
+        if (version !== STATE_VERSION) return false;
+        
+        document.getElementById('t2Center').value    = (view.getUint16(1, true) / 10).toFixed(1);
+        document.getElementById('teffCenter').value  = (view.getUint16(3, true) / 10).toFixed(1);
+        document.getElementById('maxTE').value       = (view.getUint16(5, true) / 10).toFixed(1);
+        document.getElementById('noiseSigma').value  = (view.getUint16(7, true) / 1000).toFixed(3);
+        document.getElementById('nEchoes').value     = view.getUint8(9);
+        document.getElementById('gridSize').value    = view.getUint8(10);
+        document.getElementById('rangeFactor').value = (view.getUint8(11) / 10 + 1.0).toFixed(1);
+        
+        const flags = view.getUint8(12);
+        document.getElementById('magMode').checked      = !!(flags & 1);
+        document.getElementById('weightedMode').checked = !!(flags & 2);
+        
+        return true;
+    } catch (e) {
+        console.warn('Failed to decode URL state:', e);
+        return false;
+    }
+}
+
+function stateToHash() {
+    const token = packState();
+    const newHash = '#s=' + token;
+    if (window.location.hash !== newHash) {
+        history.replaceState(null, '', newHash);
+    }
+}
+
+function hashToState() {
+    const hash = window.location.hash.slice(1);
+    if (!hash.startsWith('s=')) return false;
+    return unpackState(hash.slice(2));
+}
+
+let hashUpdateTimer = null;
+function scheduleHashUpdate() {
+    clearTimeout(hashUpdateTimer);
+    hashUpdateTimer = setTimeout(stateToHash, 300);
+}
 // === Special Functions ===
 function besselI0(x) {
     const ax = Math.abs(x);
@@ -227,7 +315,7 @@ function updateEquation(isMag, isWeighted) {
     
     bar.innerHTML = '';
     
-    const rows = [['Complex Signal:', signalTex]];
+    const rows = [[['Complex Signal:', signalTex], [isMag ? 'Rician Magnitude:' : 'Noise Model:', noiseTex],['Map Metric:', metricTex],['Echo Times:', echoTex]]];
 	
     //    ['Complex Signal:', signalTex],
     //    [isMag ? 'Rician Magnitude:' : 'Noise Model:', noiseTex],
@@ -235,21 +323,32 @@ function updateEquation(isMag, isWeighted) {
     //    ['Echo Times:', echoTex]
     //];
     
-    rows.forEach(([label, tex]) => {
-        const row = document.createElement('div');
-        row.style.marginBottom = '4px';
-        
-        const lbl = document.createElement('span');
-        lbl.className = 'eq-label';
-        lbl.textContent = label;
-        row.appendChild(lbl);
-        
-        const math = document.createElement('span');
-        katex.render(tex, math, { throwOnError: false, displayMode: false });
-        row.appendChild(math);
-        
-        bar.appendChild(row);
-    });
+	rows.forEach(pairs => {
+		const row = document.createElement('div');
+		row.style.marginBottom = '4px';
+		row.style.display = 'flex';
+		row.style.flexWrap = 'wrap';
+		row.style.alignItems = 'baseline';
+		row.style.gap = '6px 16px'; // row-gap column-gap
+
+		pairs.forEach(([label, tex]) => {
+			const group = document.createElement('span');
+			group.style.whiteSpace = 'nowrap';
+
+			const lbl = document.createElement('span');
+			lbl.className = 'eq-label';
+			lbl.textContent = label;
+			group.appendChild(lbl);
+
+			const math = document.createElement('span');
+			katex.render(tex, math, { throwOnError: false, displayMode: false });
+			group.appendChild(math);
+
+			row.appendChild(group);
+		});
+
+		bar.appendChild(row);
+	});
 }
 function updateAll() {
     ids.forEach((id,i)=>{const el=document.getElementById(displays[i]);if(el)el.textContent=document.getElementById(id).value;});
@@ -310,6 +409,7 @@ function updateAll() {
         width:520,height:520,margin:{t:50,b:60,l:70,r:20}
     },{responsive:true});
     updateDecayPlot(null);
+	scheduleHashUpdate();
 }
 
 function updateDecayPlot(hoverPoint) {
@@ -361,7 +461,15 @@ hd.addEventListener('mouseleave',()=>{lhk='out';updateDecayPlot(null);});
 ids.forEach(id=>document.getElementById(id).addEventListener('input',updateAll));
 document.getElementById('magMode').addEventListener('change',updateAll);
 document.getElementById('weightedMode').addEventListener('change',updateAll);
+// On load: restore state from URL if present, otherwise use HTML defaults
+hashToState();
 updateAll();
+
+// Handle back/forward navigation and manual hash edits
+window.addEventListener('hashchange', () => {
+    hashToState();
+    updateAll();
+});
 </script>
 </body>
 </html>
