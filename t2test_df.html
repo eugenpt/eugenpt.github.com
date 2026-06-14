@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>T2* Parameter Uncertainty Explorer</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+	<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 20px; background: #fafafa; }
+        .controls { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; 
+                    padding: 15px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); align-items: flex-end;}
+        .control-group { display: flex; flex-direction: column; min-width: 140px; }
+        .control-group label { font-size: 11px; color: #555; margin-bottom: 3px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;}
+        .equation-bar { padding: 12px 15px; margin-bottom: 15px; background: white; border-radius: 8px; 
+                        box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 13px; line-height: 1.8; color: #333; }
+        .equation-bar .eq-label { font-weight: 700; color: #555; margin-right: 4px; }
+		.eq-content {font-size: 16px;}
+        .equation-bar code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', monospace; font-size: 12px; }
+        .plots { display: flex; gap: 20px; flex-wrap: wrap; }
+        .plot-container { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 10px; }
+        input[type=range] { width: 100%; cursor: pointer; }
+        .toggle-group { display: flex; align-items: center; gap: 8px; min-width: 140px; height: 30px;}
+        .toggle-group input { cursor: pointer; width: 18px; height: 18px; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; margin-left: 6px;}
+        .badge-complex { background: #3498db; }
+        .badge-mag { background: #e74c3c; }
+        .derived-param { font-size: 11px; color: #888; margin-top: 2px; font-style: italic; }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <div class="toggle-group">
+            <input type="checkbox" id="magMode" checked>
+            <label for="magMode" style="margin:0; cursor:pointer;">Magnitude Mode <span id="modeBadge" class="badge badge-mag">MAGNITUDE</span></label>
+        </div>
+		<div class="toggle-group">
+			<input type="checkbox" id="weightedMode" checked>
+			<label for="weightedMode" style="margin:0; cursor:pointer;">Variance Weighting</label>
+		</div>
+        <div class="control-group" id="sigmaGroup">
+            <label>Noise σ: <span id="v-sigma">0.04</span></label>
+            <input type="range" id="noiseSigma" min="0.01" max="0.25" value="0.04" step="0.01">
+        </div>
+        <div class="control-group">
+            <label>T2 Center (ms): <span id="v-t2">30</span></label>
+            <input type="range" id="t2Center" min="5" max="200" value="30" step="1">
+        </div>
+        <div class="control-group">
+            <label>Linewidth Δf Center (Hz): <span id="v-deltaf">1.00</span></label>
+            <input type="range" id="deltaFCenter" min="0.1" max="20" value="1" step="0.1">
+        </div>
+        <div class="control-group">
+            <label>N Echoes: <span id="v-ne">5</span></label>
+            <input type="range" id="nEchoes" min="3" max="64" value="5" step="1">
+        </div>
+        <div class="control-group">
+            <label>Max TE (ms): <span id="v-maxte">100.0</span></label>
+            <input type="range" id="maxTE" min="1" max="200" value="100.0" step="0.5">
+            <div class="derived-param" style="display:none;">ESP = <span id="v-esp-derived">3.00</span> ms</div>
+        </div>
+        <div class="control-group">
+            <label>T2 Range Factor: <span id="v-rf">5.0</span></label>
+            <input type="range" id="rangeFactor" min="1.1" max="10.0" value="5.0" step="0.1">
+        </div>
+        <div class="control-group">
+            <label>Grid Size: <span id="v-gs">50</span></label>
+            <input type="range" id="gridSize" min="5" max="100" value="50" step="1">
+        </div>
+    </div>
+
+    <div class="equation-bar" id="equationBar"></div>
+
+    <div class="plots">
+        <div class="plot-container"><div id="heatmap"></div></div>
+        <div class="plot-container"><div id="decayPlot"></div></div>
+    </div>
+
+<script>
+
+// === Compact URL State (Binary + Base64url) ===
+const STATE_VERSION = 1;
+
+function packState() {
+    const buf = new ArrayBuffer(16);
+    const view = new DataView(buf);
+    
+    const t2   = Math.round(Math.min(Math.max(+document.getElementById('t2Center').value, 0), 6553.5) * 10);
+    const deltaF = Math.round(Math.min(Math.max(+document.getElementById('deltaFCenter').value, 0), 655.35) * 100);
+    const maxTE= Math.round(Math.min(Math.max(+document.getElementById('maxTE').value, 0), 6553.5) * 10);
+    const sig  = Math.round(Math.min(Math.max(+document.getElementById('noiseSigma').value, 0), 65.535) * 1000);
+    const ne   = Math.min(Math.max(+document.getElementById('nEchoes').value, 0), 255);
+    const gs   = Math.min(Math.max(+document.getElementById('gridSize').value, 0), 255);
+    const rf   = Math.round((Math.min(Math.max(+document.getElementById('rangeFactor').value, 1.0), 26.5) - 1.0) * 10);
+    const flags = (document.getElementById('magMode').checked ? 1 : 0)
+                | (document.getElementById('weightedMode').checked ? 2 : 0);
+    
+    view.setUint8(0, STATE_VERSION);
+    view.setUint16(1, t2, true);     // little-endian
+    view.setUint16(3, deltaF, true);
+    view.setUint16(5, maxTE, true);
+    view.setUint16(7, sig, true);
+    view.setUint8(9, ne);
+    view.setUint8(10, gs);
+    view.setUint8(11, rf);
+    view.setUint8(12, flags);
+    // bytes 13-15 reserved
+    
+    // Base64url encode (no padding, URL-safe)
+    const bytes = new Uint8Array(buf);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function unpackState(token) {
+    try {
+        // Reverse base64url → standard base64 with padding
+        let b64 = token.replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4) b64 += '=';
+        const binary = atob(b64);
+        const buf = new ArrayBuffer(binary.length);
+        const bytes = new Uint8Array(buf);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        
+        const view = new DataView(buf);
+        const version = view.getUint8(0);
+        if (version !== STATE_VERSION) return false;
+        
+        document.getElementById('t2Center').value    = (view.getUint16(1, true) / 10).toFixed(1);
+        document.getElementById('deltaFCenter').value  = (view.getUint16(3, true) / 100).toFixed(2);
+        document.getElementById('maxTE').value       = (view.getUint16(5, true) / 10).toFixed(1);
+        document.getElementById('noiseSigma').value  = (view.getUint16(7, true) / 1000).toFixed(3);
+        document.getElementById('nEchoes').value     = view.getUint8(9);
+        document.getElementById('gridSize').value    = view.getUint8(10);
+        document.getElementById('rangeFactor').value = (view.getUint8(11) / 10 + 1.0).toFixed(1);
+        
+        const flags = view.getUint8(12);
+        document.getElementById('magMode').checked      = !!(flags & 1);
+        document.getElementById('weightedMode').checked = !!(flags & 2);
+        
+        return true;
+    } catch (e) {
+        console.warn('Failed to decode URL state:', e);
+        return false;
+    }
+}
+
+function stateToHash() {
+    const token = packState();
+    const newHash = '#s=' + token;
+    if (window.location.hash !== newHash) {
+        history.replaceState(null, '', newHash);
+    }
+}
+
+function hashToState() {
+    const hash = window.location.hash.slice(1);
+    if (!hash.startsWith('s=')) return false;
+    return unpackState(hash.slice(2));
+}
+
+let hashUpdateTimer = null;
+function scheduleHashUpdate() {
+    clearTimeout(hashUpdateTimer);
+    hashUpdateTimer = setTimeout(stateToHash, 300);
+}
+// === Special Functions ===
+function besselI0(x) {
+    const ax = Math.abs(x);
+    if (ax < 3.75) {
+        const y = x / 3.75, y2 = y * y;
+        return 1 + y2*(3.5156229 + y2*(3.0899424 + y2*(1.2067492 + y2*(0.2659732 + y2*(0.0360768 + y2*0.0045813)))));
+    } else {
+        const y = 3.75 / ax;
+        return (Math.exp(ax)/Math.sqrt(ax))*(0.39894228+y*(0.01328592+y*(0.00225319+y*(-0.00157565+y*(0.00916281+y*(-0.02057706+y*(0.02635537+y*(-0.01647633+y*0.00392377))))))));
+    }
+}
+function besselI1(x) {
+    const ax = Math.abs(x);
+    if (ax < 3.75) {
+        const y = x / 3.75, y2 = y * y;
+        return ax*(0.5+y2*(0.87890594+y2*(0.51498869+y2*(0.15084934+y2*(0.02658733+y2*(0.00301532+y2*0.00032411))))));
+    } else {
+        const y = 3.75/ax, sign = x<0?-1:1;
+        return sign*(Math.exp(ax)/Math.sqrt(ax))*(0.39894228+y*(-0.03988024+y*(-0.00362018+y*(0.00163801+y*(-0.01031555+y*(0.02282967+y*(-0.02895312+y*(0.01787654+y*(-0.00420059)))))))));
+    }
+}
+function ricianMean(nu, sigma) {
+    if (sigma <= 0) return Math.abs(nu);
+    if (nu <= 0) return sigma * Math.sqrt(Math.PI / 2);
+    const x = -(nu*nu)/(2*sigma*sigma), halfX = x/2, negHalfX = -halfX;
+    return sigma*Math.sqrt(Math.PI/2)*Math.exp(halfX)*((1-x)*besselI0(negHalfX)-x*besselI1(negHalfX));
+}
+function ricianVariance(nu, sigma) {
+    const em = ricianMean(nu, sigma);
+    return Math.max(2*sigma*sigma + nu*nu - em*em, 1e-12);
+}
+
+// === Signal Models ===
+function sinc(x) { return x===0 ? 1 : Math.sin(Math.PI*x)/(Math.PI*x); }
+function complexSignal(te,t2,deltaF,a) { return a*Math.exp(-te/t2)*sinc(te*deltaF/1000); }
+function magnitudeSignal(te,t2,deltaF,a,sigma) { return ricianMean(complexSignal(te,t2,deltaF,a), sigma); }
+function generateEchoTimes(n,esp) { const t=new Float64Array(n); for(let i=0;i<n;i++) t[i]=(i+1)*esp; return t; }
+
+function optimalAmplitude(t2,deltaF,refData,tes,isMag,sigma) {
+    let num=0,den=0;
+    for(let i=0;i<tes.length;i++){const b=complexSignal(tes[i],t2,deltaF,1.0);num+=refData[i]*b;den+=b*b;}
+    let aEst=den===0?0:num/den;
+    if(isMag&&aEst>0){let g=0,h=0;for(let i=0;i<tes.length;i++){const p=magnitudeSignal(tes[i],t2,deltaF,aEst,sigma);const r=refData[i]-p;const d=complexSignal(tes[i],t2,deltaF,1.0);g-=r*d;h+=d*d;}if(h>0)aEst-=g/h;if(aEst<0)aEst=0;}
+    return aEst;
+}
+
+// Returns sqrt(Δχ²) = σ-equivalent distance
+function sigmaDistance(refData, testData, tes, t2Ref, deltaFRef, aRef, isMag, sigma, weighted) {
+    let chi2 = 0;
+    for (let i = 0; i < refData.length; i++) {
+        const diff = refData[i] - testData[i];
+        if (weighted) {
+            const nuRef = complexSignal(tes[i], t2Ref, deltaFRef, aRef);
+            const variance = isMag ? ricianVariance(nuRef, sigma) : sigma * sigma;
+            chi2 += (diff * diff) / variance;
+        } else {
+            chi2 += (diff * diff);
+        }
+    }
+    // For unweighted: divide total sum-of-squares by σ² 
+    // so result is still in σ-equivalent units
+    if (!weighted) chi2 /= (sigma * sigma);
+    return Math.sqrt(chi2);
+}
+
+// Adaptive percentile-based colormap limits
+function adaptiveColorLimits(zMatrix) {
+    const flat = [];
+    for (let r = 0; r < zMatrix.length; r++)
+        for (let c = 0; c < zMatrix[r].length; c++)
+            flat.push(zMatrix[r][c]);
+    flat.sort((a, b) => a - b);
+    const n = flat.length;
+    // Upper limit: 95th percentile, but never less than 3σ
+    // so that σ=1 always occupies at least 1/3 of the colorbar
+    const hi = Math.max(flat[Math.floor(n * 0.95)], 3.0);
+    // Lower limit: ALWAYS 0 — σ-dist is non-negative by definition
+    return { zmin: 0, zmax: hi };
+}
+
+// === State ===
+const ids=['t2Center','deltaFCenter','nEchoes','maxTE','rangeFactor','gridSize','noiseSigma'];
+const displays=['v-t2','v-deltaf','v-ne','v-maxte','v-rf','v-gs','v-sigma'];
+let currentMapData=null, currentParams=null;
+
+function getParams() {
+    const n=+document.getElementById('nEchoes').value, mt=+document.getElementById('maxTE').value;
+    return {
+        t2Center:+document.getElementById('t2Center').value, deltaFCenter:+document.getElementById('deltaFCenter').value,
+        nEchoes:n, maxTE:mt, esp:mt/n,
+        rangeFactor:+document.getElementById('rangeFactor').value, gridSize:+document.getElementById('gridSize').value,
+        noiseSigma:+document.getElementById('noiseSigma').value, isMag:document.getElementById('magMode').checked, isWeighted:document.getElementById('weightedMode').checked
+    };
+}
+
+function computeReference(p) {
+    const tes=generateEchoTimes(p.nEchoes,p.esp);
+    const refData=new Float64Array(p.nEchoes);
+    for(let i=0;i<p.nEchoes;i++) refData[i]=p.isMag?magnitudeSignal(tes[i],p.t2Center,p.deltaFCenter,1.0,p.noiseSigma):complexSignal(tes[i],p.t2Center,p.deltaFCenter,1.0);
+    return {tes,refData,aRef:1.0};
+}
+
+function computeMap(p) {
+    const {tes,refData,aRef}=computeReference(p);
+    
+    // T2 grid: linear range from center/factor to center*factor
+    const t2Min = Math.max(p.t2Center / p.rangeFactor, 0.1);
+    const t2Max = p.t2Center * p.rangeFactor;
+    const t2Vals = new Float64Array(p.gridSize);
+    for(let i=0; i<p.gridSize; i++) {
+        t2Vals[i] = t2Min + (t2Max - t2Min) * i / (p.gridSize - 1);
+    }
+
+    // DeltaF grid: fixed linear range 0.001 to 10 Hz
+    const dfMin = 0;
+    const dfMax = Math.max(10, p.deltaFCenter * p.rangeFactor);
+    const deltaFVals = new Float64Array(p.gridSize);
+    for(let i=0; i<p.gridSize; i++) {
+        deltaFVals[i] = dfMin + (dfMax - dfMin) * i / (p.gridSize - 1);
+    }
+
+    const z=[];
+    for(let r=0;r<p.gridSize;r++){
+        const row=new Float64Array(p.gridSize);
+        for(let c=0;c<p.gridSize;c++){
+            const aOpt=optimalAmplitude(t2Vals[c],deltaFVals[r],refData,tes,p.isMag,p.noiseSigma);
+            const testCurve=new Float64Array(p.nEchoes);
+            for(let i=0;i<p.nEchoes;i++) testCurve[i]=p.isMag?magnitudeSignal(tes[i],t2Vals[c],deltaFVals[r],aOpt,p.noiseSigma):complexSignal(tes[i],t2Vals[c],deltaFVals[r],aOpt);
+            row[c]=sigmaDistance(refData,testCurve,tes,p.t2Center,p.deltaFCenter,aRef,p.isMag,p.noiseSigma,p.isWeighted);
+        }
+        z.push(row);
+    }
+    return {z,t2Vals,deltaFVals,refData,tes,aRef};
+}
+
+function updateEquation(isMag, isWeighted) {
+    const bar = document.getElementById('equationBar');
+    
+    // Complex signal with sinc shown explicitly
+    const signalTex = String.raw`\nu(\mathrm{TE}) = A \cdot e^{-\mathrm{TE}/T_2} \cdot \frac{\sin(\pi \cdot \Delta f \cdot \mathrm{TE})}{\pi \cdot \Delta f \cdot \mathrm{TE}}`;
+	
+    let noiseTex;
+    if (isMag) {
+        // Now explicitly shows ν(TE) contains the sinc via reference to first line
+        noiseTex = String.raw`E[M|\nu,\sigma] = \sigma\sqrt{\tfrac{\pi}{2}}\; L_{1/2}\!\left(-\tfrac{\nu(\mathrm{TE})^2}{2\sigma^2}\right), \quad \mathrm{Var}[M] = 2\sigma^2 + \nu^2 - E[M]^2`;
+    } else {
+        noiseTex = String.raw`S(\mathrm{TE}) = \nu(\mathrm{TE}) + \mathcal{N}(0,\,\sigma^2)`;
+    }
+    
+	const metricTex = isWeighted
+		? String.raw`\sigma\text{-dist} = \sqrt{\sum_{n} \frac{(S_{ref}-S_{test})^2}{\mathrm{Var}_n}}`
+		: String.raw`\sigma\text{-dist} = \frac{1}{\sigma}\sqrt{\sum_{n} (S_{ref}-S_{test})^2}`;
+    
+    const echoTex = String.raw`\mathrm{TE}_n = \mathrm{TE}_{\max} \cdot \frac{n}{N}, \quad n = 1, \ldots, N`;
+    
+    bar.innerHTML = '';
+    
+    const rows = [[['Complex Signal:', signalTex], [isMag ? 'Rician Magnitude:' : 'Noise Model:', noiseTex],['Map Metric:', metricTex],['Echo Times:', echoTex]]];
+	
+	rows.forEach(pairs => {
+		const row = document.createElement('div');
+		row.style.marginBottom = '4px';
+		row.style.display = 'flex';
+		row.style.flexWrap = 'wrap';
+		row.style.alignItems = 'baseline';
+		row.style.gap = '6px 16px'; // row-gap column-gap
+
+		pairs.forEach(([label, tex]) => {
+			const group = document.createElement('span');
+			group.style.whiteSpace = 'nowrap';
+
+			const lbl = document.createElement('span');
+			lbl.className = 'eq-label';
+			lbl.textContent = label;
+			group.appendChild(lbl);
+
+			const math = document.createElement('span');
+			math.className = 'eq-content';
+			katex.render(tex, math, { throwOnError: false, displayMode: false });
+			group.appendChild(math);
+
+			row.appendChild(group);
+		});
+
+		bar.appendChild(row);
+	});
+}
+function updateAll() {
+    ids.forEach((id,i)=>{const el=document.getElementById(displays[i]);if(el)el.textContent=document.getElementById(id).value;});
+    const p=getParams();
+    document.getElementById('v-esp-derived').textContent=p.esp.toFixed(2);
+    const isMag=document.getElementById('magMode').checked;
+    const sg=document.getElementById('sigmaGroup'),bg=document.getElementById('modeBadge');
+    bg.textContent=isMag?'MAGNITUDE':'COMPLEX'; bg.className='badge '+(isMag?'badge-mag':'badge-complex');
+    updateEquation(isMag,p.isWeighted);
+    currentParams=p; currentMapData=computeMap(currentParams);
+
+    // ADAPTIVE colormap limits
+	const { zmin, zmax } = adaptiveColorLimits(currentMapData.z);
+	const breakNorm = 1.0 / zmax;
+
+	const colorscale = [
+		// Sub-1σ: navy → cyan (always maps to [0, 1/zmax])
+		[0,                    'rgb(10, 20, 80)'],
+		[breakNorm * 0.5,      'rgb(30, 100, 160)'],
+		[breakNorm,            'rgb(80, 200, 220)'],
+		// Hard break at exactly σ=1
+		[breakNorm,            'rgb(255, 230, 50)'],
+		[(breakNorm + 1) / 2,  'rgb(240, 130, 20)'],
+		[1,                    'rgb(180, 0, 0)']
+	];
+
+    // Logarithmic axis ranges
+    const xRange = [Math.log10(currentMapData.t2Vals[0]), Math.log10(currentMapData.t2Vals[currentMapData.t2Vals.length-1])];
+    const yRange = [-3, 1]; // Fixed log10(0.001) to log10(10)
+
+ Plotly.react('heatmap', [
+    {
+        z: currentMapData.z,
+        x: currentMapData.t2Vals,
+        y: currentMapData.deltaFVals,
+        type: 'heatmap',
+        colorscale: colorscale,
+        zmin: zmin,
+        zmax: zmax,
+        colorbar: {
+            title: 'σ-dist',
+            ticksuffix: ' σ',
+            tickvals: [0, 0.5, 1, 2, 3, Math.round(zmax)],
+            ticktext: ['0', '0.5', '1σ ✓', '2σ', '3σ', `${Math.round(zmax)}σ`]
+        },
+        hovertemplate: 'T2: %{x:.2f} ms<br>Δf: %{y:.4g} Hz<br>σ-dist: %{z:.2f} σ<extra></extra>'
+    },
+    {
+        x: [p.t2Center], y: [p.deltaFCenter], mode: 'markers', type: 'scatter',
+        marker: { symbol: 'cross', size: 14, color: 'white', line: { width: 2, color: 'rgba(0,0,0,0.5)' } },
+        hoverinfo: 'name', name: `Center (T2=${p.t2Center}, Δf=${p.deltaFCenter})`
+    }
+],// Inside updateAll(), inside Plotly.react('heatmap', ...)
+{
+        title:`${isMag?'Magnitude':'Complex'} Parameter Uncertainty Map (σ-equivalents)`,
+        xaxis:{title:'T2 (ms)'}, // Removed type: 'log' and range
+        yaxis:{title:'Linewidth Δf (Hz)'}, // Removed type: 'log' and range
+        width:520,height:520,margin:{t:50,b:60,l:70,r:20}
+},{responsive:true});
+    updateDecayPlot(null);
+	scheduleHashUpdate();
+}
+
+function updateDecayPlot(hoverPoint) {
+    const p=currentParams, tes=currentMapData.tes, refData=currentMapData.refData;
+    const errY = tes.map((te) => {
+        const nu = complexSignal(te, p.t2Center, p.deltaFCenter, currentMapData.aRef);
+        return Math.sqrt(p.isMag ? ricianVariance(nu, p.noiseSigma) : p.noiseSigma*p.noiseSigma);
+    });
+
+    const traces=[{
+        x:Array.from(tes),y:Array.from(refData),error_y:{type:'data',array:errY,color:'rgba(136,136,136,0.6)',thickness:1.5,width:4},
+        mode:'markers+lines',name:`Center (T2=${p.t2Center}, Δf=${p.deltaFCenter})`,
+        marker:{size:7,color:'#888'},line:{dash:'dash',color:'#888',width:2}
+    }];
+    let title=p.isMag?'Magnitude Decay ± 1σ':'Complex Decay ± 1σ';
+
+    if(hoverPoint){
+        const aOpt=optimalAmplitude(hoverPoint.t2,hoverPoint.deltaF,refData,tes,p.isMag,p.noiseSigma);
+        const tc=tes.map(te=>p.isMag?magnitudeSignal(te,hoverPoint.t2,hoverPoint.deltaF,aOpt,p.noiseSigma):complexSignal(te,hoverPoint.t2,hoverPoint.deltaF,aOpt));
+        traces.push({x:Array.from(tes),y:tc,mode:'markers+lines',
+            name:`Cursor (T2=${hoverPoint.t2.toFixed(2)}, Δf=${hoverPoint.deltaF.toFixed(2)})`,
+            marker:{size:7,color:'#e74c3c'},line:{color:'#e74c3c',width:3}});
+        const sd = sigmaDistance(refData,tc,tes,p.t2Center,p.deltaFCenter,currentMapData.aRef,p.isMag,p.noiseSigma,p.isWeighted);
+        title=`Cursor vs Center: ${sd.toFixed(2)}σ apart`;
+    }
+    Plotly.react('decayPlot',traces,{
+        title,xaxis:{title:'TE (ms)',rangemode:'tozero'},yaxis:{title:'Signal',rangemode:'tozero'},
+        width:520,height:520,margin:{t:50,b:60,l:70,r:20},
+        legend:{x:0.02,y:0.98,bgcolor:'rgba(255,255,255,0.8)'},hovermode:'closest'
+    },{responsive:true});
+}
+
+// === ROBUST HOVER ===
+const hd=document.getElementById('heatmap'); let lhk='';
+hd.addEventListener('mousemove',function(e){
+    if(!currentMapData||!currentParams)return;
+    const L=hd._fullLayout;if(!L||!L.xaxis)return;
+    const bb=hd.getBoundingClientRect(),xp=e.clientX-bb.left-L.margin.l,yp=e.clientY-bb.top-L.margin.t;
+    const pw=L.width-L.margin.l-L.margin.r,ph=L.height-L.margin.t-L.margin.b;
+    if(xp<0||xp>pw||yp<0||yp>ph){if(lhk!=='out'){lhk='out';updateDecayPlot(null);}return;}
+    
+    // Map pixel coordinates to log-scale data values
+ // Inside hd.addEventListener('mousemove', ...)
+    // Map pixel coordinates to linear data values
+    const xr=L.xaxis.range,yr=L.yaxis.range;
+    const t2=xr[0]+(xp/pw)*(xr[1]-xr[0]);
+    const deltaF=yr[1]-(yp/ph)*(yr[1]-yr[0]); // Y-axis is inverted in DOM vs Data
+    
+    const t2c=Math.max(currentMapData.t2Vals[0],Math.min(t2,currentMapData.t2Vals[currentMapData.t2Vals.length-1]));
+    const dfc=Math.max(currentMapData.deltaFVals[0],Math.min(deltaF,currentMapData.deltaFVals[currentMapData.deltaFVals.length-1]));    const k=`${t2c.toFixed(2)}_${dfc.toFixed(4)}`;
+    if(k!==lhk){lhk=k;updateDecayPlot({t2:t2c,deltaF:dfc});}
+});
+hd.addEventListener('mouseleave',()=>{lhk='out';updateDecayPlot(null);});
+ids.forEach(id=>document.getElementById(id).addEventListener('input',updateAll));
+document.getElementById('magMode').addEventListener('change',updateAll);
+document.getElementById('weightedMode').addEventListener('change',updateAll);
+// On load: restore state from URL if present, otherwise use HTML defaults
+hashToState();
+updateAll();
+
+// Handle back/forward navigation and manual hash edits
+window.addEventListener('hashchange', () => {
+    hashToState();
+    updateAll();
+});
+</script>
+</body>
+</html>
