@@ -298,8 +298,7 @@ function updateEquation(isMag, isWeighted) {
     const bar = document.getElementById('equationBar');
     
     // Complex signal with sinc shown explicitly
-    const signalTex = String.raw`\nu(\mathrm{TE}) = A \cdot e^{-\mathrm{TE}/T_2^*} \cdot \mathrm{sinc}\!\left(\frac{\mathrm{TE}}{T_{\mathrm{eff}}}\right)`;
-    
+    const signalTex = String.raw`\nu(\mathrm{TE}) = A \cdot e^{-\mathrm{TE}/T_2^*} \cdot \frac{\sin\!\left(\pi \cdot \frac{\mathrm{TE}}{T_{\mathrm{eff}}}\right)}{\pi \cdot \frac{\mathrm{TE}}{T_{\mathrm{eff}}}}`;
     let noiseTex;
     if (isMag) {
         // Now explicitly shows ν(TE) contains the sinc via reference to first line
