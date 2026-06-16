@@ -44,28 +44,28 @@
         </div>
         <div class="control-group">
             <label>T2 Center (ms): <span id="v-t2">30</span></label>
-            <input type="range" id="t2Center" min="5" max="200" value="30" step="1">
+            <input type="range" id="t2Center" min="5" max="500" value="100" step="1">
         </div>
         <div class="control-group">
             <label>Teff Center (ms): <span id="v-teff">90</span></label>
-            <input type="range" id="teffCenter" min="1" max="300" value="90" step="0.5">
+            <input type="range" id="teffCenter" min="1" max="500" value="200" step="0.5">
         </div>
         <div class="control-group">
-            <label>N Echoes: <span id="v-ne">5</span></label>
-            <input type="range" id="nEchoes" min="3" max="64" value="5" step="1">
+            <label>N Echoes: <span id="v-ne">16</span></label>
+            <input type="range" id="nEchoes" min="3" max="32" value="16" step="1">
         </div>
         <div class="control-group">
             <label>Max TE (ms): <span id="v-maxte">100.0</span></label>
-            <input type="range" id="maxTE" min="1" max="200" value="100.0" step="0.5">
+            <input type="range" id="maxTE" min="1" max="500" value="310.0" step="0.5">
             <div class="derived-param" style="display:none;">ESP = <span id="v-esp-derived">3.00</span> ms</div>
         </div>
         <div class="control-group">
             <label>Range Factor (upper): <span id="v-rf">5.0</span></label>
-            <input type="range" id="rangeFactor" min="1.1" max="10.0" value="5.0" step="0.1">
+            <input type="range" id="rangeFactor" min="1.1" max="10.0" value="2.0" step="0.1">
         </div>
         <div class="control-group">
             <label>Grid Size: <span id="v-gs">50</span></label>
-            <input type="range" id="gridSize" min="5" max="100" value="50" step="1">
+            <input type="range" id="gridSize" min="5" max="100" value="100" step="1">
         </div>
     </div>
 
@@ -201,7 +201,7 @@ function ricianVariance(nu, sigma) {
 function sinc(x) { return x===0 ? 1 : Math.sin(Math.PI*x)/(Math.PI*x); }
 function complexSignal(te,t2,teff,a) { return a*Math.exp(-te/t2)*sinc(te/teff); }
 function magnitudeSignal(te,t2,teff,a,sigma) { return ricianMean(complexSignal(te,t2,teff,a), sigma); }
-function generateEchoTimes(n,esp) { const t=new Float64Array(n); for(let i=0;i<n;i++) t[i]=(i+1)*esp; return t; }
+function generateEchoTimes(n,esp) { const t=new Float64Array(n); for(let i=0;i<n;i++) t[i]=(i+0.5)*esp; return t; }
 
 function optimalAmplitude(t2,teff,refData,tes,isMag,sigma) {
     let num=0,den=0;
@@ -263,7 +263,7 @@ function getParams() {
     const n=+document.getElementById('nEchoes').value, mt=+document.getElementById('maxTE').value;
     return {
         t2Center:+document.getElementById('t2Center').value, teffCenter:+document.getElementById('teffCenter').value,
-        nEchoes:n, maxTE:mt, esp:mt/n,
+        nEchoes:n, maxTE:mt, esp:mt/(n-0.5),
         rangeFactor:+document.getElementById('rangeFactor').value, gridSize:+document.getElementById('gridSize').value,
         noiseSigma:+document.getElementById('noiseSigma').value, isMag:document.getElementById('magMode').checked, isWeighted:document.getElementById('weightedMode').checked
     };
@@ -311,7 +311,7 @@ function updateEquation(isMag, isWeighted) {
 		? String.raw`\sigma\text{-dist} = \sqrt{\sum_{n} \frac{(S_{ref}-S_{test})^2}{\mathrm{Var}_n}}`
 		: String.raw`\sigma\text{-dist} = \frac{1}{\sigma}\sqrt{\sum_{n} (S_{ref}-S_{test})^2}`;
     
-    const echoTex = String.raw`\mathrm{TE}_n = \mathrm{TE}_{\max} \cdot \frac{n}{N}, \quad n = 1, \ldots, N`;
+    const echoTex = String.raw`\mathrm{TE}_n = \mathrm{TE}_{\max} \cdot \frac{n-\frac{1}{2}}{N}, \quad n = 1, \ldots, N`;
     
     bar.innerHTML = '';
     
